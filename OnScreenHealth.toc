@@ -4,9 +4,9 @@
 ## Title: OnScreenHealth
 ## Notes: Simple text displays of health and power for player, target, and pet.
 ## X-Category: Combat
-## X-Copyright: Copyright � 2007�2008 Alyssa Kinley, a.k.a. Phanx
+## X-Copyright: Copyright © 2007 © 2008 Alyssa Kinley, a.k.a. Phanx
 ## X-License: Do not redistribute. See README for complete license terms.
-## X-Website: http://www.wowinterface.com/downloads/info7470-OnScreenHealth.html
+## X-Website: https://github.com/pschriner/OnScreenHealth
 
 ## Author: Phanx
 ## X-Credits: Blink for the concept, Alumno for the request, Damjau for the original pet code, rdji for the combat indicator idea.

@@ -1,4 +1,6 @@
-# Note: The original Readme is [README.txt](README.txt)
+# Note: The original Readme is [README.txt](README.TXT)
+
+I was given permission by the author to continue this addon.
 
 # Onscreenhealth - ACE3 version
 
