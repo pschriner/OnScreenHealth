@@ -7,8 +7,8 @@
 	See README for license terms and additional information.
 	Credits: Alumno, Blink, damjau, rdji
 --------------------------------------------------------------]]
-
-OnScreenHealth = AceLibrary("AceAddon-2.0"):new("AceEvent-2.0", "AceConsole-2.0", "AceDB-2.0")
+local _, OnScreenHealth = ...
+OnScreenHealth = LibStub and LibStub("AceAddon-3.0"):NewAddon(OnScreenHealth, "OnScreenHealth", "AceEvent-3.0", "AceConsole-3.0")
 
 --[[------------------------------------------------------------
 	Locals
@@ -35,14 +35,14 @@ local UnitIsGhost = UnitIsGhost
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsUnit = UnitIsUnit
-local UnitMana = UnitPower
-local UnitManaMax = UnitPowerMax
+local UnitPower = UnitPower
+local UnitPowerMax = UnitPowerMax
 local UnitName = UnitName
 local UnitPowerType = UnitPowerType
 
 local OnScreenHealth = OnScreenHealth
 local VERSION = GetAddOnMetadata("OnScreenHealth", "Version"); if VERSION:find("%a") then VERSION = "1.0-dev" end
-local db, isPetClass, isComboClass, isHpClass, currentToT
+local db, isPetClass, isComboClass, currentToT
 local frame, font, color, text, cur, maxi, perc, kind, _
 local tmp1, tmp2, tmp3, tmp4, tmp5, tmp6
 
@@ -50,11 +50,6 @@ local classColors = {}
 for class, color in pairs(RAID_CLASS_COLORS) do
 	classColors[class] = string.format("%02x%02x%02x", color.r * 255, color.g * 255, color.b * 255)
 end
-
-local SPELL_POWER_HOLY_POWER = SPELL_POWER_HOLY_POWER
-
-local HOLY_POWER_COLORS = {}
-local HOLY_POWER_FULL = HOLY_POWER_FULL
 
 local ICON_LIST = {
     "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_1:",
@@ -73,7 +68,7 @@ local SharedMedia = LibStub and LibStub("LibSharedMedia-3.0", true)
 	Debugging
 -------------------------------------------------------------]]--
 local debugShow = false
-local debugLevel = 1
+local debugLevel = 2
 
 local Debug = function(lvl, msg)
 	if not lvl then lvl = 0 end
@@ -101,6 +96,13 @@ OnScreenHealth.L = L
 --[[------------------------------------------------------------
 	Utilities
 ------------------------------------------------------------]]--
+local function RGBPercToHex(r, g, b)
+	r = r <= 1 and r >= 0 and r or 0
+	g = g <= 1 and g >= 0 and g or 0
+	b = b <= 1 and b >= 0 and b or 0
+	return string.format("%02x%02x%02x", r*255, g*255, b*255)
+end
+
 function OnScreenHealth:Short(num)
 	if not num then return end
 	Debug(3, "Shortening"..num)
@@ -202,7 +204,9 @@ end
 --[[------------------------------------------------------------
 	Generic updaters
 ------------------------------------------------------------]]--
-function OnScreenHealth:UpdateHealth(unit)
+function OnScreenHealth:UpdateHealth(unit, unit1)
+	unit = unit1 or unit
+	Debug(2, "Updating health for "..unit)
 	if unit ~= "player" and unit ~= "target" and unit ~= "pet" then return end
 	Debug(2, "Updating health for "..unit)
 
@@ -261,12 +265,84 @@ function OnScreenHealth:UpdateHealth(unit)
 	self:CheckVisibility(unit)
 end
 
-function OnScreenHealth:UpdatePower(unit)
+local powerEnumFromEnergizeStringLookup =
+{
+	MANA = Enum.PowerType.Mana,
+	RAGE = Enum.PowerType.Rage,
+	FOCUS = Enum.PowerType.Focus,
+	ENERGY = Enum.PowerType.Energy,
+	COMBO_POINTS = Enum.PowerType.ComboPoints,
+	RUNES = Enum.PowerType.Runes,
+	RUNIC_POWER = Enum.PowerType.RunicPower,
+	SOUL_SHARDS = Enum.PowerType.SoulShards,
+	LUNAR_POWER = Enum.PowerType.LunarPower,
+	HOLY_POWER = Enum.PowerType.HolyPower,
+	ALTERNATE = Enum.PowerType.Alternate,
+	MAELSTROM = Enum.PowerType.Maelstrom,
+	CHI = Enum.PowerType.Chi,
+	ARCANE_CHARGES = Enum.PowerType.ArcaneCharges,
+	FURY = Enum.PowerType.Fury,
+	PAIN = Enum.PowerType.Pain,
+	INSANITY = Enum.PowerType.Insanity,
+}
+
+function OnScreenHealth:GetPowerEnumFromEnergizeString(power)
+	return powerEnumFromEnergizeStringLookup[power] or Enum.PowerType.NumPowerTypes;
+end
+
+function OnScreenHealth:UNIT_PET(unit)
+	self:UpdatePet()
+end
+
+function OnScreenHealth:PLAYER_CONTROL_GAINED()
+	self:UpdateAll()
+end
+
+function OnScreenHealth:PLAYER_CONTROL_LOST()
+	self:UpdateAll()
+end
+
+function OnScreenHealth:PET_BAR_UPDATE()
+	self:UpdatePet()
+end
+
+function OnScreenHealth:PET_UI_UPDATE()
+	self:UpdatePet()
+end
+
+function OnScreenHealth:UPDATE_VEHICLE_ACTIONBAR()
+	self:UpdatePet()
+end
+
+function OnScreenHealth:PLAYER_FARSIGHT_FOCUS_CHANGED()
+	self:UpdatePet()
+end
+
+function OnScreenHealth:PET_BAR_UPDATE_USABLE()
+	self:UpdatePet()
+end
+
+function OnScreenHealth:PLAYER_MOUNT_DISPLAY_CHANGED()
+	self:UpdatePet()
+end
+
+
+
+
+
+function OnScreenHealth:UpdatePower(unit, unit1, powertype)
+	if powertype ~= nil then
+		Debug(2, "Updating powertype "..powertype)
+		if powertype == "COMBO_POINTS" and db.targetShowCP then
+		 	self:UpdateCP()
+		end
+	end
+	unit = unit1 or unit
 	if unit ~= "player" and unit ~= "target" and unit ~= "pet" then return end
 	Debug(2, "Updating power for "..unit)
 
 	if unit == "player" then
-		frame, font = OSH_PlayerFrame, OSH_PlayerPower
+		frame, font, fontSecondaryPower = OSH_PlayerFrame, OSH_PlayerPower, OSH_PlayerSecondaryPower
 	elseif unit == "target" then
 		frame, font = OSH_TargetFrame, OSH_TargetPower
 	elseif unit == "pet" then
@@ -280,23 +356,27 @@ function OnScreenHealth:UpdatePower(unit)
 		return
 	end
 	
-	-- Holy Power
-	if isHpClass and unit == "player" then
-		local hp = UnitPower("player", SPELL_POWER_HOLY_POWER)
-		local font1 = OSH_PlayerHolyPoints		
-		if hp ~= 0 then
-			if not HOLY_POWER_COLORS[hp] then
-				-- HOLYPOWER = {r = 0.95, g = 0.90, b = 0.60},
-				-- BANKEDHOLYPOWER = {r = 0.96, g = 0.61, b = 0.84},
-				local c = "f2e599"
-				if hp > HOLY_POWER_FULL then
-					c = "f39bd6"
-				end
-				HOLY_POWER_COLORS[hp] = c
-			end
-			font1:SetText("|cff"..HOLY_POWER_COLORS[hp]..hp.."|r")
+	-- Secondary power
+	local secondaryPowers = {
+		"RUNES",
+		"SOUL_SHARDS",
+		"LUNAR_POWER",
+		"HOLY_POWER",
+		"MAELSTROM_POWER",
+		"CHI",
+		"ARCANE_CHARGES"
+	}
+	if unit == "player" and powertype ~= nil and tContains(secondaryPowers, powertype) then
+		secondaryPower = UnitPower(unit, self:GetPowerEnumFromEnergizeString(powertype)) or 0
+		color = PowerBarColor[powertype] or db.colorDefault
+		if type(color) == "table" then
+			color = RGBPercToHex(color.r, color.g, color.b)
+		end
+		Debug(3, "Secondary power: "..secondaryPower)
+		if secondaryPower ~= 0 then
+			fontSecondaryPower:SetText("|cff"..color..secondaryPower.."|r")
 		else
-			font1:SetText(" ")
+			fontSecondaryPower:SetText(" ")
 		end
 	end
 
@@ -317,7 +397,7 @@ function OnScreenHealth:UpdatePower(unit)
 		color = db.colorDefault
 	end	
 
-	font:SetText("|cff"..color..self:GetFormattedText(UnitIsPlayer(unit) and db.textFormatPowerPlayer or db.textFormatPowerMonster, UnitPower(unit), UnitManaMax(unit) , withPossibleDeficit).."|r")
+	font:SetText("|cff"..color..self:GetFormattedText(UnitIsPlayer(unit) and db.textFormatPowerPlayer or db.textFormatPowerMonster, UnitPower(unit), UnitPowerMax(unit) , withPossibleDeficit).."|r")
 	
 	self:CheckVisibility(unit)
 end
@@ -326,7 +406,14 @@ end
 	We like to hide Pets and Players that are at max and not in combat.
 ------------------------------------------------------------]]--
 function OnScreenHealth:CheckVisibility(unit)
-	if (unit ~= "player" and unit ~= "pet") or UnitAffectingCombat(unit) or db.playerShowOOC then
+	if (unit == "pet") and ((not UnitExists("pet")) or (not UnitIsConnected("pet"))) and (not UnitInVehicle("player")) then
+		OSH_PetFrame:Hide()
+		return false
+	end
+	if unit == "pet" and  UnitInVehicle("player") then
+		unit = "vehicle"
+	end
+	if (unit ~= "player" and unit ~= "pet" and unit ~= "vehicle") or UnitAffectingCombat(unit) or db.playerShowOOC then
 		return true
 	end
 	
@@ -343,7 +430,12 @@ function OnScreenHealth:CheckVisibility(unit)
 			end
 		end
 	elseif unit == "pet" then
-		if cur == maxi then
+		if (cur == maxi) or (not UnitExists("pet")) or (not UnitIsConnected("pet")) then
+			OSH_PetFrame:Hide()
+			return false
+		end
+	elseif unit == "vehicle" then
+		if (cur == maxi) then
 			OSH_PetFrame:Hide()
 			return false
 		end
@@ -371,7 +463,7 @@ function OnScreenHealth:UpdateAll(type)
 		self:UpdatePlayer()
 		self:UpdateTarget()
 		if UnitExists("pet") then
-			self:UpdatePet()
+			self:UpdatePet("player")
 		end
 	end
 end
@@ -410,8 +502,11 @@ function OnScreenHealth:UpdatePet(owner)
 	-- ps patch
 	--if not db.petEnable or (not db.playerShowOOC and not UnitAffectingCombat("player") and not UnitAffectingCombat("pet")) or (not db.petShowDead and UnitIsDeadOrGhost("pet")) or not UnitExists("pet") then
 	if not db.petEnable or (not UnitAffectingCombat("player") and not UnitAffectingCombat("pet")) or (not db.petShowDead and UnitIsDeadOrGhost("pet")) or not UnitExists("pet") then
-		self:CheckVisibility("pet")
-		return
+		Debug(1, "Check Pet visibility")
+		show = self:CheckVisibility("pet")
+		if not show then
+			 return -- pet frame was hidden
+		end
 	end
 	Debug(1, "Updating pet")
 
@@ -450,8 +545,7 @@ function OnScreenHealth:UpdateTarget()
 	if db.showPower then
 		self:UpdatePower("target")
 	end
-	isInVehicle = UnitHasVehicleUI("player")
-	if isComboClass or isInVehicle then
+	if db.targetShowCP then
 		self:UpdateCP()
 	end
 	
@@ -482,10 +576,10 @@ end
 
 function OnScreenHealth:UpdateCP()
 	local isInVehicle = UnitHasVehicleUI("player")
-	local tmp1 = GetComboPoints("player","target")
+	local tmp1 = GetComboPoints("player", "target")
 	local tmp2 = 0		
 	if isInVehicle then
-		tmp2 = GetComboPoints("vehicle")
+		tmp2 = UnitPower("vehicle", 4)
 	end	
 	if tmp1 == 0 and tmp2 == 0 then -- no combo points
 		OSH_TargetCombo:SetText()
@@ -626,34 +720,33 @@ function OnScreenHealth:CreateFrames()
 	pf:SetWidth(100)
 	pf:SetHeight(50)
 
+	-- health
 	ph = pf:CreateFontString("OSH_PlayerHealth", "OVERLAY")
 	ph:SetShadowOffset(tmp1, tmp2)
 
+	-- power
 	pp = pf:CreateFontString("OSH_PlayerPower", "OVERLAY")
 	pp:SetShadowOffset(tmp1, tmp2)
 
+	-- status
 	ps = pf:CreateFontString("OSH_PlayerStatus", "OVERLAY")
 	ps:SetShadowOffset(tmp1, tmp2)
 	
-	--holy points
-	if isHpClass then
-		php = pf:CreateFontString("OSH_PlayerHolyPoints", "OVERLAY")
-		php:SetShadowOffset(tmp1, tmp2)
-	end
+	-- secondary power
+	php = pf:CreateFontString("OSH_PlayerSecondaryPower", "OVERLAY")
+	php:SetShadowOffset(tmp1, tmp2)
 
-	--if isPetClass then
-		mf = CreateFrame("Frame", "OSH_PetFrame", UIParent)
-		mf:SetFrameStrata("BACKGROUND")
-		mf:SetFrameLevel(0)
-		mf:SetWidth(100)
-		mf:SetHeight(50)
+	mf = CreateFrame("Frame", "OSH_PetFrame", UIParent)
+	mf:SetFrameStrata("BACKGROUND")
+	mf:SetFrameLevel(0)
+	mf:SetWidth(100)
+	mf:SetHeight(50)
 
-		mh = mf:CreateFontString("OSH_PetHealth", "OVERLAY")
-		mh:SetShadowOffset(tmp1, tmp2)
+	mh = mf:CreateFontString("OSH_PetHealth", "OVERLAY")
+	mh:SetShadowOffset(tmp1, tmp2)
 
-		mp = mf:CreateFontString("OSH_PetPower", "OVERLAY")
-		mp:SetShadowOffset(tmp1, tmp2)
-	--end
+	mp = mf:CreateFontString("OSH_PetPower", "OVERLAY")
+	mp:SetShadowOffset(tmp1, tmp2)
 
 	tf = CreateFrame("Frame", "OSH_TargetFrame", UIParent)
 	tf:SetFrameStrata("BACKGROUND")
@@ -682,15 +775,13 @@ function OnScreenHealth:CreateFrames()
 	--end
 
 	if db.alphaMode == "COMBAT" then
-		tmp3 = UnitAffectingCombat("player") and db.alphaCombat or db.alphaOOC
+		tmp3 = UnitAffectingCombat("player") and ( db.alphaCombat or 1) or ( db.alphaOOC or 0.5)
 	else
 		tmp3 = db.alphaFixed
 	end
 	pf:SetAlpha(tmp3)
 	tf:SetAlpha(tmp3)
-	if UnitExists("pet") then
-		mf:SetAlpha(tmp3)
-	end
+	mf:SetAlpha(tmp3)
 
 	self:ApplyPositions()
 	self:ApplyFonts()
@@ -712,6 +803,9 @@ function OnScreenHealth:ApplyPositions()
 		tmp1, tmp2, tmp3, tmp4, tmp5, tmp6 = "TOPRIGHT", "BOTTOMRIGHT", "RIGHT", "TOPLEFT", "BOTTOMLEFT", "LEFT"
 	end
 
+	Debug(1, "PosX ".. db.posX)
+	Debug(1, "PosY ".. db.posY)
+
 	OSH_PlayerFrame:ClearAllPoints()
 	OSH_PlayerFrame:SetPoint(tmp1, UIParent, "CENTER", -db.posX, db.posY)
 	OSH_PlayerHealth:ClearAllPoints()
@@ -723,12 +817,10 @@ function OnScreenHealth:ApplyPositions()
 	OSH_PlayerStatus:ClearAllPoints()
 	OSH_PlayerStatus:SetPoint(tmp2, OSH_PlayerHealth, tmp1, 0, 0)
 	OSH_PlayerStatus:SetJustifyH(tmp3)
-	
-	if isHpClass then
-		OSH_PlayerHolyPoints:ClearAllPoints()
-		OSH_PlayerHolyPoints:SetPoint(tmp2, OSH_PlayerHealth, tmp1, 0, 10)
-		OSH_PlayerHolyPoints:SetJustifyH(tmp3)
-	end
+
+	OSH_PlayerSecondaryPower:ClearAllPoints()
+	OSH_PlayerSecondaryPower:SetPoint(tmp2, OSH_PlayerHealth, tmp1, 0, 10)
+	OSH_PlayerSecondaryPower:SetJustifyH(tmp3)
 
 	OSH_TargetFrame:ClearAllPoints()
 	OSH_TargetFrame:SetPoint(tmp4, UIParent, "CENTER", db.posX, db.posY)
@@ -750,22 +842,20 @@ function OnScreenHealth:ApplyPositions()
 	OSH_TargetIcon:SetPoint("RIGHT", OSH_TargetHealth, "LEFT", 0, 0)
 	OSH_TargetIcon:SetJustifyH(tmp6)
 
-	--if isComboClass then
-		OSH_TargetCombo:ClearAllPoints()
-		OSH_TargetCombo:SetPoint(tmp5, OSH_TargetHealth, tmp4, 0, 0)
-		OSH_TargetCombo:SetJustifyH(tmp6)
-	--end
+	-- combo class
+	OSH_TargetCombo:ClearAllPoints()
+	OSH_TargetCombo:SetPoint(tmp5, OSH_TargetHealth, tmp4, 0, 0)
+	OSH_TargetCombo:SetJustifyH(tmp6)
 
-	--if isPetClass then
-		OSH_PetFrame:ClearAllPoints()
-		OSH_PetFrame:SetPoint(tmp2, OSH_PlayerFrame, tmp1, 0, db.posPet)
-		OSH_PetHealth:ClearAllPoints()
-		OSH_PetHealth:SetPoint(tmp1, OSH_PetFrame, tmp1, 0, 0)
-		OSH_PetHealth:SetJustifyH(tmp3)
-		OSH_PetPower:ClearAllPoints()
-		OSH_PetPower:SetPoint(tmp1, OSH_PetHealth, tmp2, 0, 0)
-		OSH_PetPower:SetJustifyH(tmp3)
-	--end
+	-- pet frame
+	OSH_PetFrame:ClearAllPoints()
+	OSH_PetFrame:SetPoint(tmp2, OSH_PlayerFrame, tmp1, 0, db.posPet)
+	OSH_PetHealth:ClearAllPoints()
+	OSH_PetHealth:SetPoint(tmp1, OSH_PetFrame, tmp1, 0, 0)
+	OSH_PetHealth:SetJustifyH(tmp3)
+	OSH_PetPower:ClearAllPoints()
+	OSH_PetPower:SetPoint(tmp1, OSH_PetHealth, tmp2, 0, 0)
+	OSH_PetPower:SetJustifyH(tmp3)
 end
 
 function OnScreenHealth:ApplyFonts()
@@ -774,21 +864,15 @@ function OnScreenHealth:ApplyFonts()
 	OSH_PlayerHealth:SetFont(tmp1, tmp2, tmp4)
 	OSH_PlayerPower:SetFont(tmp1, tmp3, tmp4)
 	OSH_PlayerStatus:SetFont(tmp1, tmp3, tmp4)
-	if isHpClass then
-		OSH_PlayerHolyPoints:SetFont(tmp1, db.fontSizeCombo, tmp4)
-	end
+	OSH_PlayerSecondaryPower:SetFont(tmp1, db.fontSizeCombo, tmp4)
 	OSH_TargetHealth:SetFont(tmp1, tmp2, tmp4)
 	OSH_TargetPower:SetFont(tmp1, tmp3, tmp4)
 	OSH_TargetTarget:SetFont(tmp1, db.fontSizeTarget, tmp4)
 	OSH_TargetPercent:SetFont(tmp1, db.fontSizeTargetPercent, tmp4)
 	OSH_TargetIcon:SetFont(tmp1, db.fontSizeTargetPercent, tmp4)
-	--if isComboClass then
 		OSH_TargetCombo:SetFont(tmp1, db.fontSizeCombo, tmp4)
-	--end
-	--if isPetClass then
 		OSH_PetHealth:SetFont(tmp1, tmp2 * db.fontSizePet, tmp4)
 		OSH_PetPower:SetFont(tmp1, tmp3 * db.fontSizePet, tmp4)
-	--end
 end
 
 --[[------------------------------------------------------------
@@ -796,86 +880,41 @@ end
 ------------------------------------------------------------]]--
 function OnScreenHealth:UpdatePowerEvents()
 	if db.showPower then
-		if not self:IsEventRegistered("UNIT_DISPLAYPOWER") then
-			self:RegisterEvent("UNIT_DISPLAYPOWER", "UpdatePower")
-		end
-		if not self:IsEventRegistered("RAID_TARGET_UPDATE") then
-			self:RegisterEvent("RAID_TARGET_UPDATE", "UpdateTargetIcon")
-		end
-		-- 4.0.1
-		if not self:IsEventRegistered("UNIT_POWER_UPDATE") then
-			self:RegisterEvent("UNIT_POWER_UPDATE", "UpdatePower")
-		end
-		if not self:IsEventRegistered("UNIT_MAXPOWER") then
-			self:RegisterEvent("UNIT_MAXPOWER", "UpdatePower")
-		end	
-		--
+		self:RegisterEvent("UNIT_DISPLAYPOWER", "UpdatePower")
+		self:RegisterEvent("RAID_TARGET_UPDATE", "UpdateTargetIcon")
+		self:RegisterEvent("UNIT_POWER_UPDATE", "UpdatePower")
+		self:RegisterEvent("UNIT_MAXPOWER", "UpdatePower")
 	else
-		if self:IsEventRegistered("UNIT_DISPLAYPOWER") then
-			self:UnregisterEvent("UNIT_DISPLAYPOWER")
-		end
-		if self:IsEventRegistered("RAID_TARGET_UPDATE") then
-			self:UnregisterEvent("RAID_TARGET_UPDATE")
-		end
-		-- 4.0.1
-		if self:IsEventRegistered("UNIT_POWER_UPDATE") then
-			self:UnregisterEvent("UNIT_POWER_UPDATE", "UpdatePower")
-		end
-		if self:IsEventRegistered("UNIT_MAXPOWER") then
-			self:UnregisterEvent("UNIT_MAXPOWER", "UpdatePower")
+		self:UnregisterEvent("UNIT_DISPLAYPOWER")
+		self:UnregisterEvent("RAID_TARGET_UPDATE")
+		self:UnregisterEvent("UNIT_POWER_UPDATE", "UpdatePower")
+		self:UnregisterEvent("UNIT_MAXPOWER", "UpdatePower")
 		end	
-		--
-	end
 end
 
 function OnScreenHealth:UpdateCombatEvents()
 	if db.playerShowOOC and db.targetShowOOC and db.alphaMode ~= "COMBAT" and not db.playerShowCombatStatus then
-		if self:IsEventRegistered("PLAYER_REGEN_DISABLED") then
-			self:UnregisterEvent("PLAYER_REGEN_DISABLED")
-		end
-		if self:IsEventRegistered("PLAYER_REGEN_ENABLED") then
-			self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-		end
+		self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 	else
-		if not self:IsEventRegistered("PLAYER_REGEN_DISABLED") then
-			self:RegisterEvent("PLAYER_REGEN_DISABLED", "EnterCombat")
-		end
-		if not self:IsEventRegistered("PLAYER_REGEN_ENABLED") then
-			self:RegisterEvent("PLAYER_REGEN_ENABLED", "LeaveCombat")
-		end
+		self:RegisterEvent("PLAYER_REGEN_DISABLED", "EnterCombat")
+		self:RegisterEvent("PLAYER_REGEN_ENABLED", "LeaveCombat")
 	end
 end
 
 function OnScreenHealth:UpdateDeathEvents()
 	if db.playerShowDead then
-		if self:IsEventRegistered("PLAYER_ALIVE") then
-			self:UnregisterEvent("PLAYER_ALIVE")
-		end
-		if self:IsEventRegistered("PLAYER_DEAD") then
-			self:UnregisterEvent("PLAYER_DEAD")
-		end
+		self:UnregisterEvent("PLAYER_ALIVE")
+		self:UnregisterEvent("PLAYER_DEAD")
 	else
-		if not self:IsEventRegistered("PLAYER_ALIVE") then
-			self:RegisterEvent("PLAYER_ALIVE", "PlayerAlive")
-			self:RegisterEvent("PLAYER_UNGHOST", "PlayerAlive")
-		end
-		if not self:IsEventRegistered("PLAYER_DEAD") then
-			self:RegisterEvent("PLAYER_DEAD", "PlayerDead")
-		end
+		self:RegisterEvent("PLAYER_ALIVE", "PlayerAlive")
+		self:RegisterEvent("PLAYER_UNGHOST", "PlayerAlive")
+		self:RegisterEvent("PLAYER_DEAD", "PlayerDead")
 	end
 end
 
---[[------------------------------------------------------------
-	Initialization
-------------------------------------------------------------]]--
-function OnScreenHealth:OnInitialize()
-	_, tmp1 = UnitClass("player")
-	isPetClass = tmp1 == "HUNTER" or tmp1 == "WARLOCK"
-	isComboClass = tmp1 == "DRUID" or tmp1 == "ROGUE"
-	isHpClass = tmp1 == "PALADIN"
-
-	self:RegisterDB("OnScreenHealthDB")
-	self:RegisterDefaults("profile", {
+local defaults = {
+	profile = {
 		playerEnable = true,
 		playerShowDead = false,
 		playerShowOOC = true,
@@ -925,7 +964,16 @@ function OnScreenHealth:OnInitialize()
 		posY = 0,
 		posPet = 20,
 		version = VERSION
-	})
+	}
+}
+
+--[[------------------------------------------------------------
+	Initialization
+------------------------------------------------------------]]--
+function OnScreenHealth:OnInitialize()
+	_, tmp1 = UnitClass("player")
+
+	self.db = LibStub("AceDB-3.0"):New("OnScreenHealthDB", defaults, "Default")
 	db = self.db.profile
 
 	--
@@ -977,15 +1025,22 @@ function OnScreenHealth:OnEnable()
 
 	self:RegisterEvent("UNIT_HEALTH", "UpdateHealth")
 	self:RegisterEvent("PLAYER_TARGET_CHANGED", "UpdateTarget")
+	self:RegisterEvent("PLAYER_TALENT_UPDATE", "UpdateAll")
 
 	self:UpdatePowerEvents()
 	self:UpdateCombatEvents()
 	self:UpdateDeathEvents()
 
-	--if isPetClass then
-		Debug(1, "Registering pet events")
-		self:RegisterEvent("UNIT_PET", "UpdatePet")
-	--end
+	Debug(1, "Registering pet events")
+	self:RegisterEvent("UNIT_PET")
+	self:RegisterEvent("PLAYER_CONTROL_GAINED")
+	self:RegisterEvent("PLAYER_CONTROL_LOST")
+	self:RegisterEvent("PET_BAR_UPDATE")
+	self:RegisterEvent("PET_UI_UPDATE")
+	self:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR")
+	self:RegisterEvent("PLAYER_FARSIGHT_FOCUS_CHANGED")
+	self:RegisterEvent("PET_BAR_UPDATE_USABLE")
+	self:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
 
 	if db.playerFrequentUpdates then
 		OSH_PlayerFrame:SetScript("OnUpdate", OnScreenHealth.FrequentUpdate)
@@ -995,12 +1050,6 @@ function OnScreenHealth:OnEnable()
 		OSH_TargetFrame:SetScript("OnUpdate", OnScreenHealth.CheckToT)
 	end
 
-	if db.targetShowCP then
-		Debug(1, "Registering combo point events")
-		self:RegisterEvent("UNIT_POWER_UPDATE", "UpdateCP")
-		--self:RegisterEvent("UNIT_POWER_UPDATE", "UpdateCP")
-	end
-	
 	if db.alphaMode == "COMBAT" then
 		tmp1 = db.alphaOOC
 		OSH_PlayerFrame:SetAlpha(tmp1)
@@ -1010,7 +1059,6 @@ function OnScreenHealth:OnEnable()
 		OSH_TargetIcon:SetAlpha(tmp1)
 		if UnitExists("pet") then
 			OSH_PetFrame:SetAlpha(tmp1)
-			OSH_PetFrame:Show()
 			self:CheckVisibility("pet")
 		end
 	end
@@ -1020,7 +1068,13 @@ function OnScreenHealth:OnDisable()
 	Debug(1, "Disabling")
 	OSH_PlayerFrame:Hide()
 	OSH_TargetFrame:Hide()
-	-- if isPetClass then
 		OSH_PetFrame:Hide()
-	-- end
+end
+
+function OnScreenHealth:OnProfileChanged(event, database, newProfileKey)
+	Debug(1, "OnProfileChanged")
+	local oldDB = db
+	db = database.profile
+	self:UpdateAll("health")
+	self:UpdateAll("power")
 end

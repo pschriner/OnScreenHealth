@@ -4,7 +4,7 @@
 ## Title: OnScreenHealth
 ## Notes: Simple text displays of health and power for player, target, and pet.
 ## X-Category: Combat
-## X-Copyright: Copyright © 2007–2008 Alyssa Kinley, a.k.a. Phanx
+## X-Copyright: Copyright ï¿½ 2007ï¿½2008 Alyssa Kinley, a.k.a. Phanx
 ## X-License: Do not redistribute. See README for complete license terms.
 ## X-Website: http://www.wowinterface.com/downloads/info7470-OnScreenHealth.html
 
@@ -14,8 +14,8 @@
 
 ## SavedVariables: OnScreenHealthDB
 
-## OptionalDeps: Ace2, LibSharedMedia-3.0, SharedMedia
-## X-Embeds: Ace2, LibSharedMedia-3.0
+## OptionalDeps: Ace3, LibSharedMedia-3.0, SharedMedia
+## X-Embeds: Ace3, LibSharedMedia-3.0
 
 ## LoadManagers: AddonLoader
 ## X-LoadOn-Always: delayed
