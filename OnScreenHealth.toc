@@ -1,5 +1,5 @@
-## Interface: 30000
-## Version: 3.0.2.29
+## Interface: 80000
+## Version: 8.0.0
 
 ## Title: OnScreenHealth
 ## Notes: Simple text displays of health and power for player, target, and pet.
